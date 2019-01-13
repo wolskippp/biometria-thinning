@@ -1,6 +1,7 @@
 import numpy as np
 import cv2 as cv
-from termcolor import colored
+
+from Utils import are_neighbours_sticking, get_pixels_clockwise_around, get_pixel
 
 remove_sums = [3, 5, 7, 12, 13, 14, 15, 20,
                21, 22, 23, 28, 29, 30, 31, 48,
@@ -18,43 +19,28 @@ remove_sums = [3, 5, 7, 12, 13, 14, 15, 20,
                237, 239, 240, 241, 243, 244, 245, 246,
                247, 248, 249, 251, 252, 253, 254, 255]
 
-weight_matrix = np.array([[128, 1, 2], [64, 1, 4], [32, 16, 8]])
+weight_matrix = np.array([128, 1, 2, 4, 8, 16, 32, 64])
 
 
-def thinning(img):
-    output = binarize(img)
-
+def kmm(img):
+    output = img.copy()
     change = 1
     counter = 1
-    max_counter = 50
+    max_counter = 1000
     after = cv.countNonZero(output)
     while change != 0 and counter != max_counter:
         before = after
 
         output = twos_and_threes_contour(output)
-        print_each_pixel(output)
         output = mark_fours(output)
-        print_each_pixel(output)
-        output = remove_fours(output)
-        print_each_pixel(output)
         output = remove_based_on_sum(output)
-        print_each_pixel(output)
         after = cv.countNonZero(output)
         change = before - after
         counter = counter + 1
         print('iteration: ', counter)
         print('white changed to black: ', change)
-    return prepare_to_print(output)
 
-
-def prepare_to_print(img):
-    shape = img.shape
-    for row in range(shape[0]):
-        for col in range(shape[1]):
-            if img[row, col] != 0:
-                img[row, col] = 255
-
-    return img
+    return output
 
 
 def remove_fours(img):
@@ -65,32 +51,6 @@ def remove_fours(img):
                 img[row, col] = 0
 
     return img
-
-
-def print_each_pixel(img):
-    shape = img.shape
-    for row in range(shape[0]):
-        print('')
-        for col in range(shape[1]):
-            if img[row, col] == 0:
-                print(colored(img[row, col], 'red'), end=" ")
-            else:
-                print(colored(img[row, col], 'white'), end=" ")
-
-
-def binarize(img):
-    shape = img.shape
-    output = img.copy()
-
-    for row in range(shape[0]):
-        for col in range(shape[1]):
-
-            if img[row, col] == 0:
-                continue
-
-            output[row, col] = 1
-
-    return output
 
 
 def twos_and_threes_contour(img):
@@ -138,15 +98,14 @@ def remove_based_on_sum(img):
             if img[row, col] != 4:
                 continue
 
+            neighbours = get_pixels_clockwise_around(img, row, col)
+
             sum = 0
-            for y in range(-1, 2):
-                for x in range(-1, 2):
-                    if x == 0 and y == 0:
-                        continue
-                    neighbour = get_pixel(img, row + y, col + x)
-                    weight = weight_matrix[y + 1, x + 1]
-                    if neighbour != 0:
-                        sum = sum + weight
+            for weight, neighbour in zip(weight_matrix, neighbours):
+                if neighbour == 0:
+                    continue
+
+                sum = sum + weight
 
             if sum in remove_sums:
                 output[row, col] = 0
@@ -156,52 +115,15 @@ def remove_based_on_sum(img):
     return output
 
 
-def get_neighbouring(img, row, col):
-    all_pos = [(-1, -1),
-               (0, 1),
-               (1, 1),
-               (1, 0),
-               (1, -1),
-               (0, -1),
-               (-1, -1),
-               (-1, 0)]
-
-    neighbour = []
-    for x, y in all_pos:
-        pixel = get_pixel(img, row + x, col + y)
-        neighbour.append(pixel)
-
-    return neighbour
-
-
-def remove_num_from_start(dirs):
-    back_idx = 0
-    for idx, dir in enumerate(dirs):
-        if dir != 0:
-            back_idx = idx
-            break
-
-    return dirs[back_idx:]
-
-
 def should_be_4(img, row, col):
-    original_list = get_neighbouring(img, row, col)
+    original_list = get_pixels_clockwise_around(img, row, col)
     num_of_neighours = sum(list(map(lambda x: x != 0, original_list)))
     correct_num_of_neighbours = num_of_neighours == 2 or num_of_neighours == 3 or num_of_neighours == 4
-
-    all_dirs = remove_num_from_start(original_list)
-
-    reversed_list = all_dirs[::-1]
-
-    all_dirs = remove_num_from_start(reversed_list)
 
     if not correct_num_of_neighbours:
         return False
 
-    if 0 in all_dirs:
-        return False
-
-    return True
+    return are_neighbours_sticking(original_list)
 
 
 def get_basic_directions(img, row, col):
@@ -229,14 +151,3 @@ def should_be_2(img, row, col):
 def should_be_3(img, row, col):
     diagonal_dirs = get_diagonals(img, row, col)
     return not all(diagonal_dirs)
-
-
-def get_pixel(img, row, col):
-    row_max, col_max = img.shape
-    if row_max <= row or row < 0:
-        return 0
-
-    if col_max <= col or col < 0:
-        return 0
-
-    return img[row, col]

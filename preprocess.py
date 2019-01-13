@@ -1,8 +1,19 @@
 from global_processing import sharpening, average, grayscale, adaptive_equalization, otsu
-from morphology import erosion
 
 
+def binarize(img):
+    shape = img.shape
+    output = img.copy()
 
+    for row in range(shape[0]):
+        for col in range(shape[1]):
+
+            if img[row, col] == 0:
+                continue
+
+            output[row, col] = 1
+
+    return output
 
 
 def preprocess_image(img, sharpen=False, gaussian_blur=False):
@@ -20,5 +31,6 @@ def preprocess_image(img, sharpen=False, gaussian_blur=False):
     output = otsu(output)
 
     # output = erosion(output)
+    output = binarize(output)
 
     return output
